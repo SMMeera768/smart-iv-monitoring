@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: smart-iv-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:h2}
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/smartiv}
+    username: ${DB_USERNAME:smartiv}
+    password: ${DB_PASSWORD:smartiv}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: 8080
+
+# AI service connection
+ai-service:
+  base-url: ${AI_SERVICE_URL:http://localhost:8000}
+  timeout-ms: 5000
+  enabled: true
+
+# Signal processing configuration — all thresholds are EXPERIMENTAL DEFAULTS.
+# Final values must come from calibration and experimental validation.
+smartiv:
+  signal:
+    moving-average-window: 10 # samples — EXPERIMENTAL
+    flow-smoothing-window: 5 # samples — EXPERIMENTAL
+    feature-window: 20 # samples for slope/variance — EXPERIMENTAL
+    baseline-window: 60 # samples for baseline estimation — EXPERIMENTAL
+
+  rules:
+    flow-interruption-threshold-g-per-min: 0.5 # EXPERIMENTAL — near-zero flow
+    flow-interruption-min-duration-ms: 120000 # 2 min — EXPERIMENTAL
+    low-volume-threshold-percent: 15.0 # EXPERIMENTAL
+    bag-replacement-weight-jump-g: 50.0 # EXPERIMENTAL
+    bag-replacement-stability-duration-ms: 30000 # 30 s — EXPERIMENTAL
+    normal-flow-hysteresis-g-per-min: 1.0 # EXPERIMENTAL
+
+  ai:
+    anomaly-threshold: 0.6 # EXPERIMENTAL — normalized anomaly index
+    drift-threshold: 0.5 # EXPERIMENTAL
+
+  device:
+    offline-timeout-ms: 300000 # 5 min
+
+logging:
+  level:
+    com.smartiv: INFO
+    org.springframework.web: WARN

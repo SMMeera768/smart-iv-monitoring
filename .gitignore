@@ -1,0 +1,49 @@
+# =============================================================================
+# Smart IV Monitoring Platform - .gitignore
+# =============================================================================
+
+# Java / Maven build output
+backend/spring-service/target/
+**/target/
+*.class
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+env/
+venv/
+.venv/
+ENV/
+
+# IDE and Editor configs
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.sublime-project
+*.sublime-workspace
+
+# Operating System temporary files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite3
+smartiv_db.*

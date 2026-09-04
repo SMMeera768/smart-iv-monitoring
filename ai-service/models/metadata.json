@@ -1,0 +1,17 @@
+{
+  "modelVersion": "iforest-v1",
+  "algorithm": "IsolationForest",
+  "trainingDate": "2026-09-04T10:33:11.550018Z",
+  "datasetType": "SYNTHETIC_PROTOTYPE_BASELINE",
+  "sampleCount": 2000,
+  "featureNames": [
+    "weightSlope",
+    "standardDeviation",
+    "rollingVariance",
+    "signalNoise",
+    "baselineDeviation",
+    "stuckSignalDuration"
+  ],
+  "contamination": 0.05,
+  "randomState": 42
+}
