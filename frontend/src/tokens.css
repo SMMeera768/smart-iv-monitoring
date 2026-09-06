@@ -1,0 +1,80 @@
+/* ============================================================
+   Design tokens
+   Subject: a ward monitoring surface — nurses glance at this
+   between other tasks, doctors scan it during rounds. The job
+   is triage-at-a-glance: calm by default, unmistakable when
+   something needs a human. Severity color-coding here isn't
+   decorative — it's the actual clinical convention (stable/
+   watch/critical), so we lean into it deliberately rather than
+   avoiding it as "a default".
+   ============================================================ */
+:root {
+  /* Color */
+  --bg: #EEF2F3;
+  --surface: #FFFFFF;
+  --surface-sunken: #F5F8F8;
+  --ink: #13202224;
+  --ink-strong: #101C1E;
+  --ink-muted: #5C7377;
+  --border: #DCE5E6;
+  --border-strong: #C4D2D3;
+
+  --teal-900: #0B4E4D;
+  --teal-700: #0E7C7B;
+  --teal-500: #14A19B;
+  --teal-100: #DCF2F0;
+
+  --critical: #B3392B;
+  --critical-bg: #FBEAE7;
+  --warning: #A6690D;
+  --warning-bg: #FBF1DE;
+  --stable: #2B7A57;
+  --stable-bg: #E4F3EB;
+  --info: #395A8F;
+  --info-bg: #E9EFF9;
+
+  /* Type */
+  --font-display: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Layout */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --sidebar-w: 240px;
+  --shadow-card: 0 1px 2px rgba(16, 28, 30, 0.06), 0 1px 1px rgba(16, 28, 30, 0.04);
+  --shadow-raised: 0 4px 16px rgba(16, 28, 30, 0.10);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink-strong);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--teal-700);
+  outline-offset: 2px;
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

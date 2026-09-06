@@ -47,3 +47,10 @@ logs/
 *.db
 *.sqlite3
 smartiv_db.*
+
+# Node / Frontend build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
