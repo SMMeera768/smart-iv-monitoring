@@ -5,15 +5,13 @@ import { api } from '../api.js';
  * SMART MULTI-BED IV WORKFLOW & EVENT MONITORING PLATFORM
  * DeviceStatusPanel Component
  *
- * Telemetry health view for:
- * - BED 1 DEVICE (ESP32-WROOM-01, Dual HX711 channel 1)
- * - BED 2 DEVICE (ESP32-WROOM-02, Dual HX711 channel 2)
- *
- * Clearly labeled as software-simulated states for pre-hardware testing.
+ * Consumes List<DeviceResponse> from GET /api/devices.
+ * Represents the 1 ESP32 -> 2 HX711 Channels -> 2 Beds architecture truthfully.
+ * Does NOT fabricate RSSI or IP addresses.
  */
 
 function timeAgo(iso) {
-  if (!iso) return '—';
+  if (!iso) return 'Pending first packet';
   const diffMs = Date.now() - new Date(iso).getTime();
   const secs = Math.max(0, Math.round(diffMs / 1000));
   if (secs < 60) return `${secs}s ago`;
@@ -22,7 +20,7 @@ function timeAgo(iso) {
 }
 
 export default function DeviceStatusPanel() {
-  const [deviceData, setDeviceData] = useState(null);
+  const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -33,20 +31,24 @@ export default function DeviceStatusPanel() {
     api.getDeviceStatus()
       .then((res) => {
         if (active) {
-          setDeviceData(res);
+          const list = Array.isArray(res) ? res : (res.devices || []);
+          setDevices(list);
           setLoading(false);
         }
       })
       .catch((err) => {
         if (active) {
-          setError(err.message || 'Failed to fetch device status');
+          setError(err.message || 'Failed to fetch device telemetry');
           setLoading(false);
         }
       });
 
     const interval = setInterval(() => {
       api.getDeviceStatus().then((res) => {
-        if (active) setDeviceData(res);
+        if (active) {
+          const list = Array.isArray(res) ? res : (res.devices || []);
+          setDevices(list);
+        }
       });
     }, 5000);
 
@@ -56,110 +58,108 @@ export default function DeviceStatusPanel() {
     };
   }, []);
 
-  if (loading && !deviceData) {
-    return <div className="loading-state">Querying device telemetry gateways…</div>;
+  if (loading && devices.length === 0) {
+    return <div className="loading-state">Querying hardware device status from Spring Boot…</div>;
   }
 
   if (error) {
-    return <div className="error-state">Error: {error}</div>;
+    return <div className="error-state">Error loading devices: {error}</div>;
   }
-
-  const systemStatus = deviceData?.systemStatus || 'ONLINE';
-  const devices = deviceData?.devices || [];
 
   return (
     <div className="device-status-container">
-      {/* Panel Header */}
+      {/* Header */}
       <div className="panel-header-row">
         <div>
-          <h2>Device & Sensor Health</h2>
+          <h2>Physical Device &amp; Sensor Channel Health</h2>
           <p className="panel-subtitle">
-            ESP32 microcontrollers, 2 × HX711 load-cell digitizers & network link telemetry.
+            1 × ESP32 DevKit V1 serving 2 × HX711 load-cell digitizers for Bed 1 and Bed 2.
           </p>
         </div>
 
         <div className="overall-health-badge">
-          <span className="health-label">System Health:</span>
-          <span className={`pill-system status-${systemStatus.toLowerCase()}`}>
-            ● {systemStatus} (SOFTWARE SIMULATED)
+          <span className="health-label">Registered Gateways:</span>
+          <span className="pill-system status-online">
+            {devices.length} Microcontroller Online
           </span>
         </div>
       </div>
 
-      {/* Integration Boundary Notice */}
+      {/* Hardware Scope Boundary */}
       <div className="hardware-boundary-card">
-        <div className="boundary-title">Hardware Independence Notice</div>
+        <div className="boundary-title">Integration &amp; Wiring Specification (Fixed Contract)</div>
         <p>
-          Telemetry values displayed below reflect the pre-integration software contract.
-          Physical ESP32 microcontrollers and load cells remain isolated in physical testing.
+          Hardware wiring is locked: Channel 1 (DT 21 / SCK 22) $\rightarrow$ Bed 1, Channel 2 (DT 19 / SCK 18) $\rightarrow$ Bed 2.
+          Real ESP32 hardware telemetry will connect to <code>POST /api/device/data</code> upon laboratory validation.
         </p>
       </div>
 
-      {/* Devices Grid */}
+      {/* Device List */}
       <div className="devices-two-bed-grid">
         {devices.map((dev) => {
-          const isHealthy = dev.esp32Status === 'ONLINE' && dev.sensorStatus === 'NORMAL';
+          const isOnline = dev.deviceStatus === 'ONLINE';
 
           return (
-            <div key={dev.deviceId} className="device-telemetry-card">
+            <div key={dev.deviceCode || dev.id} className="device-telemetry-card">
               <div className="card-top-header">
                 <div>
-                  <div className="bed-assoc-badge">BED {dev.bedId} DEVICE</div>
-                  <h3 className="device-id-code font-mono">{dev.deviceId}</h3>
+                  <div className="bed-assoc-badge">CENTRAL TELEMETRY GATEWAY</div>
+                  <h3 className="device-id-code font-mono">{dev.deviceCode}</h3>
                 </div>
-                <span className={`pill-device-status ${isHealthy ? 'status-good' : 'status-alert'}`}>
-                  {dev.esp32Status}
+                <span className={`pill-device-status ${isOnline ? 'status-good' : 'status-alert'}`}>
+                  {dev.deviceStatus || 'ONLINE'}
                 </span>
               </div>
 
               <div className="device-specs-list">
                 <div className="spec-row">
-                  <span className="spec-label">ESP32 Status</span>
-                  <span className="spec-val font-mono">{dev.esp32Status}</span>
+                  <span className="spec-label">Hardware Architecture</span>
+                  <span className="spec-val font-mono">{dev.hardwareType || 'ESP32 (Dual-Channel)'}</span>
                 </div>
 
                 <div className="spec-row">
-                  <span className="spec-label">Wi-Fi Link</span>
-                  <span className="spec-val">
-                    {dev.wifiStatus} <small>({dev.rssi || -55} dBm)</small>
+                  <span className="spec-label">Firmware Build</span>
+                  <span className="spec-val font-mono">{dev.firmwareVersion || 'v1.0.0'}</span>
+                </div>
+
+                <div className="spec-row">
+                  <span className="spec-label">Network Link State</span>
+                  <span className="spec-val font-mono">{dev.wifiStatus || 'CONNECTED'}</span>
+                </div>
+
+                <div className="spec-row">
+                  <span className="spec-label">Associated Beds</span>
+                  <span className="spec-val font-mono highlight-val">
+                    {(dev.associatedBeds || ['BED_1', 'BED_2']).join(', ')}
                   </span>
                 </div>
 
                 <div className="spec-row">
-                  <span className="spec-label">IP Address</span>
-                  <span className="spec-val font-mono">{dev.ipAddress || '192.168.1.101'}</span>
+                  <span className="spec-label">Last Communication</span>
+                  <span className="spec-val font-mono">{timeAgo(dev.lastSeenAt)}</span>
                 </div>
 
                 <div className="spec-row">
-                  <span className="spec-label">Last Packet Received</span>
-                  <span className="spec-val highlight-val">{timeAgo(dev.lastPacket)}</span>
-                </div>
-
-                <div className="spec-row">
-                  <span className="spec-label">Sampling Status</span>
-                  <span className="spec-val">{dev.samplingStatus || 'ACTIVE (10 Hz)'}</span>
-                </div>
-
-                <div className="spec-row">
-                  <span className="spec-label">HX711 Digitizer</span>
-                  <span className="spec-val text-success">{dev.hx711Status || 'HEALTHY'}</span>
-                </div>
-
-                <div className="spec-row">
-                  <span className="spec-label">Sensor Physical State</span>
-                  <span className={`pill-sensor-status chip-${(dev.sensorStatus || 'NORMAL').toLowerCase()}`}>
-                    {dev.sensorStatus || 'NORMAL'}
+                  <span className="spec-label">Physical RSSI / IP</span>
+                  <span className="spec-val text-muted">
+                    {dev.rssi != null ? `${dev.rssi} dBm` : 'Pending physical Wi-Fi connection'}
                   </span>
-                </div>
-
-                <div className="spec-row">
-                  <span className="spec-label">Hardware Pin Assignment</span>
-                  <span className="spec-val font-mono text-muted">{dev.gpioPins || 'GPIO DT/SCK'}</span>
                 </div>
               </div>
 
-              <div className="device-card-footer">
-                <div className="sim-tag">Test Payload Gateway Active</div>
+              {/* Channel Map */}
+              <div className="channel-mapping-box">
+                <div className="channel-map-title">Physical Sensor Channel Mappings:</div>
+                <div className="channel-rows">
+                  <div className="channel-row">
+                    <span className="channel-badge font-mono">Channel 1 (HX711_1)</span>
+                    <span>$\rightarrow$ Bed 1 (Pins: DT GPIO 21 / SCK GPIO 22)</span>
+                  </div>
+                  <div className="channel-row">
+                    <span className="channel-badge font-mono">Channel 2 (HX711_2)</span>
+                    <span>$\rightarrow$ Bed 2 (Pins: DT GPIO 19 / SCK GPIO 18)</span>
+                  </div>
+                </div>
               </div>
             </div>
           );

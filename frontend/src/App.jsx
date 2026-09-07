@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Login from './components/Login.jsx';
 import Sidebar, { ROLE_PERMISSIONS } from './components/Sidebar.jsx';
 import WardDashboard from './components/WardDashboard.jsx';
@@ -38,6 +38,7 @@ export default function App() {
   });
 
   const [activeView, setActiveView] = useState('dashboard');
+  const [dashboardSummary, setDashboardSummary] = useState(null);
   const [beds, setBeds] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [alertFilter, setAlertFilter] = useState('ALL');
@@ -97,11 +98,12 @@ export default function App() {
   const refreshData = useCallback(async () => {
     if (!session) return;
     try {
-      const [bedsData, alertsData] = await Promise.all([
+      const [summaryData, alertsData] = await Promise.all([
         api.getDashboardSummary(),
         api.getAlerts(),
       ]);
-      setBeds(bedsData || []);
+      setDashboardSummary(summaryData);
+      setBeds(Array.isArray(summaryData?.beds) ? summaryData.beds : (Array.isArray(summaryData) ? summaryData : []));
       setAlerts(alertsData || []);
     } catch (err) {
       if (!session.isDemo) {
@@ -204,6 +206,7 @@ export default function App() {
           {activeView === 'dashboard' && (
             <WardDashboard
               beds={beds}
+              summary={dashboardSummary || {}}
               loading={loading}
               onAcknowledge={handleAcknowledge}
               onResolve={handleResolve}

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
 /**
@@ -29,14 +29,18 @@ export default function AuditLogPanel() {
     fetchLogs();
   }, []);
 
+  const isDemo = api.isMockMode ? api.isMockMode() : true;
+
   const filteredLogs = logs.filter((log) => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
-      log.user?.toLowerCase().includes(term) ||
-      log.action?.toLowerCase().includes(term) ||
-      log.bed?.toLowerCase().includes(term) ||
-      log.event?.toLowerCase().includes(term)
+      (log.user && log.user.toLowerCase().includes(term)) ||
+      (log.action && log.action.toLowerCase().includes(term)) ||
+      (log.bed && log.bed.toLowerCase().includes(term)) ||
+      (log.event && log.event.toLowerCase().includes(term)) ||
+      (log.role && log.role.toLowerCase().includes(term)) ||
+      (log.result && log.result.toLowerCase().includes(term))
     );
   });
 
@@ -53,7 +57,7 @@ export default function AuditLogPanel() {
         <div className="search-filter-box">
           <input
             type="text"
-            placeholder="Filter by user, action or bed…"
+            placeholder="Filter by user, action, or bed…"
             className="input-text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -62,9 +66,11 @@ export default function AuditLogPanel() {
       </div>
 
       <div className="demo-data-banner">
-        <div className="banner-badge">DEMO AUDIT LOG</div>
+        <div className="banner-badge">{isDemo ? 'DEMO AUDIT LOG' : 'AUDIT TRAIL'}</div>
         <div className="banner-text">
-          Audit entries displayed below reflect interactive mock actions and seeded events.
+          {isDemo
+            ? 'Audit entries displayed below reflect interactive mock actions and seeded events.'
+            : 'Audit entries retrieved from PostgreSQL immutable event ledger.'}
         </div>
       </div>
 
@@ -84,7 +90,7 @@ export default function AuditLogPanel() {
                 <th>Role</th>
                 <th>Action Executed</th>
                 <th>Bed / Target</th>
-                <th>Associated Event</th>
+                <th>Details / Transition</th>
                 <th>Result</th>
               </tr>
             </thead>
@@ -95,7 +101,7 @@ export default function AuditLogPanel() {
                     {new Date(log.timestamp).toLocaleString()}
                   </td>
                   <td>
-                    <strong>{log.user}</strong>
+                    <strong>{log.user || log.username}</strong>
                   </td>
                   <td>
                     <span className="role-tag font-mono">{log.role || 'STAFF'}</span>
@@ -103,8 +109,16 @@ export default function AuditLogPanel() {
                   <td>
                     <span className="action-badge">{log.action}</span>
                   </td>
-                  <td>{log.bed}</td>
-                  <td className="font-mono">{log.event}</td>
+                  <td>
+                    <span className="bed-tag">{log.bed || log.bedCode || 'System'}</span>
+                  </td>
+                  <td className="font-mono text-small">
+                    {log.previousValue && log.newValue ? (
+                      <span>{log.event}: <del>{log.previousValue}</del> → <strong>{log.newValue}</strong></span>
+                    ) : (
+                      log.event || '—'
+                    )}
+                  </td>
                   <td>
                     <span className={`result-pill ${log.result === 'SUCCESS' ? 'pill-success' : 'pill-failure'}`}>
                       {log.result}

@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 
 /**
  * SMART MULTI-BED IV WORKFLOW & EVENT MONITORING PLATFORM
@@ -118,7 +118,9 @@ export default function AlertsPanel({
                   </div>
 
                   <div className="alert-header-meta">
-                    <span className="bed-pill">Bed {alert.bedId}</span>
+                    <span className="bed-pill">
+                      {alert.bedCode ? alert.bedCode.replace('_', ' ') : `Bed ${alert.bedId}`}
+                    </span>
                     <span className={`pill-severity pill-${severityClass}`}>
                       {alert.severity}
                     </span>
@@ -132,7 +134,7 @@ export default function AlertsPanel({
                     <span className="evidence-title">Algorithm Evidence Score:</span>
                     <span className="evidence-value">
                       {alert.evidenceScore != null ? (
-                        <strong>{(alert.evidenceScore * 100).toFixed(0)}% confidence</strong>
+                        <strong>{Math.round(alert.evidenceScore)}% confidence</strong>
                       ) : (
                         'Under computation'
                       )}
@@ -141,8 +143,8 @@ export default function AlertsPanel({
 
                   <div className="alert-timestamps-row">
                     <span>Created: <strong>{timeAgo(alert.createdAt)}</strong></span>
-                    {alert.acknowledgedByName && (
-                      <span>Ack by: <strong>{alert.acknowledgedByName}</strong></span>
+                    {(alert.acknowledgedByName || alert.acknowledgedBy) && (
+                      <span>Ack by: <strong>{alert.acknowledgedByName || alert.acknowledgedBy}</strong></span>
                     )}
                     {alert.resolvedAt && (
                       <span>Resolved: <strong>{timeAgo(alert.resolvedAt)}</strong></span>

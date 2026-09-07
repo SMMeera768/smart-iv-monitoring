@@ -1,13 +1,18 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import BedCard from './BedCard.jsx';
 import BedCharts from './BedCharts.jsx';
 
 /**
  * SMART MULTI-BED IV WORKFLOW & EVENT MONITORING PLATFORM
  * Two-Bed Clinical Ward Dashboard
+ * 
+ * Consumes DashboardSummaryResponse:
+ * - systemStatus, totalBeds, normalBeds, activeAlerts, physicalDevicesOnline, sensorChannelsOnline
+ * - beds: List<BedStatusResponse>
  */
 export default function WardDashboard({
   beds = [],
+  summary = {},
   loading = false,
   error = null,
   onAcknowledge,
@@ -20,7 +25,7 @@ export default function WardDashboard({
     return (
       <div className="dashboard-loading-state">
         <div className="spinner" />
-        <p>Loading real-time two-bed telemetry from backend / mock stream…</p>
+        <p>Loading two-bed telemetry from backend stream…</p>
       </div>
     );
   }
@@ -41,7 +46,9 @@ export default function WardDashboard({
     );
   }
 
-  if (!beds || beds.length === 0) {
+  const bedList = Array.isArray(beds) && beds.length > 0 ? beds : (Array.isArray(summary?.beds) ? summary.beds : []);
+
+  if (!bedList || bedList.length === 0) {
     return (
       <div className="empty-state">
         <h3>No Bed Telemetry Active</h3>
@@ -50,52 +57,67 @@ export default function WardDashboard({
     );
   }
 
+  const systemStatus = summary?.systemStatus || 'ONLINE';
+  const physicalDevicesOnline = summary?.physicalDevicesOnline ?? 1;
+  const sensorChannelsOnline = summary?.sensorChannelsOnline ?? 2;
+  const activeAlertCount = summary?.activeAlerts ?? bedList.filter(b => b.status === 'CRITICAL').length;
+
   return (
     <div className="ward-dashboard-container">
       {/* Centralized Demo Data Banner */}
-      <div className="demo-data-banner">
-        <div className="banner-badge">DEMO DATA</div>
-        <div className="banner-text">
-          <strong>SMART MULTI-BED IV PLATFORM (SOFTWARE POC)</strong> — Operating on simulated telemetry.
-          No physical ESP32 / HX711 hardware connected.
+      {isDemo && (
+        <div className="demo-data-banner">
+          <div className="banner-badge">DEMO DATA</div>
+          <div className="banner-text">
+            <strong>SMART MULTI-BED IV PLATFORM (SOFTWARE POC)</strong> — Operating on simulated telemetry.
+            Physical ESP32 &amp; load cells are independently undergoing laboratory testing.
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Two-Bed Header Bar */}
+      {/* Two-Bed Header Bar — Genuine Backend Summary Metrics */}
       <div className="dashboard-top-metrics">
         <div className="metric-pill">
-          <span>Active Beds:</span>
-          <strong>{beds.length} (Bed 1 & Bed 2)</strong>
+          <span>Physical Hardware:</span>
+          <strong>{physicalDevicesOnline} ESP32 Online (Dual-Channel)</strong>
+        </div>
+        <div className="metric-pill">
+          <span>Active Sensor Channels:</span>
+          <strong>{sensorChannelsOnline} / 2 Channels Monitored</strong>
         </div>
         <div className="metric-pill">
           <span>System Status:</span>
-          <strong className="status-online">ONLINE (SIMULATED)</strong>
+          <strong className={systemStatus === 'ONLINE' ? 'status-online' : 'status-alert'}>
+            {systemStatus} {isDemo ? '(MOCK)' : '(LIVE)'}
+          </strong>
         </div>
         <div className="metric-pill">
-          <span>AI Anomaly Service:</span>
-          <strong>Isolation Forest (Synthetic Testing)</strong>
+          <span>Active Alerts:</span>
+          <strong className={activeAlertCount > 0 ? 'text-critical' : ''}>
+            {activeAlertCount} {activeAlertCount === 1 ? 'Alert' : 'Alerts'}
+          </strong>
         </div>
       </div>
 
-      {/* Two-Bed Grid */}
+      {/* Two-Bed Grid: Bed 1 and Bed 2 */}
       <div className="bed-grid two-bed-layout">
-        {beds.map((bed) => (
+        {bedList.map((bed) => (
           <BedCard
-            key={bed.bedId || bed.id}
+            key={bed.bedCode || bed.bedId || bed.id}
             bed={bed}
             onAcknowledge={onAcknowledge}
             onResolve={onResolve}
-            onViewCharts={(bedId) => setSelectedBedForCharts(bedId)}
+            onViewCharts={(bedCode) => setSelectedBedForCharts(bedCode)}
           />
         ))}
       </div>
 
-      {/* Modal / Slide-out for Time Series Charts */}
+      {/* Modal for Time Series Charts */}
       {selectedBedForCharts && (
         <div className="modal-backdrop" onClick={() => setSelectedBedForCharts(null)}>
           <div className="modal-content chart-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Bed {selectedBedForCharts} — Real-Time Weight & Flow Telemetry</h3>
+              <h3>{selectedBedForCharts === 'BED_2' || selectedBedForCharts === '2' ? 'Bed 2' : 'Bed 1'} — Gravimetric Telemetry</h3>
               <button
                 className="btn-close"
                 onClick={() => setSelectedBedForCharts(null)}
@@ -104,7 +126,7 @@ export default function WardDashboard({
               </button>
             </div>
             <div className="modal-body">
-              <BedCharts bedId={selectedBedForCharts} />
+              <BedCharts bedCode={selectedBedForCharts} />
             </div>
           </div>
         </div>

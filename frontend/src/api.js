@@ -1,39 +1,49 @@
-﻿/**
+/**
  * SMART MULTI-BED IV WORKFLOW & EVENT MONITORING PLATFORM
  * Centralized API Service Layer & Endpoint Contracts
  *
- * Implements all 19 standardized service methods and 20 endpoint placeholders.
- * Supports toggling between MOCK API and REAL REST API seamlessly.
+ * Fully aligned with Spring Boot Controllers and DTOs:
+ * - DashboardSummaryResponse, BedStatusResponse, ReadingPoint
+ * - Page<AlertResponse>, Page<EventResponse>, Page<AuditLogResponse>
+ * - List<DeviceResponse>, List<ConfigurationResponse>
+ * - CalibrationResponse, ResearchMetricsResponse, AnalyticsResponse
  */
 
 import {
+  adaptDashboardSummary,
   adaptBed,
   adaptReading,
   adaptEvent,
   adaptAlert,
-  adaptDeviceStatus,
+  adaptDevice,
+  adaptConfigurationList,
+  adaptAuditLog,
+  adaptCalibration,
+  adaptAnalytics,
+  extractPageContent,
 } from './adapters/dataAdapter.js';
 
 import {
+  mockDashboardSummary,
   mockBeds,
   generateMockReadings,
   mockEvents,
   mockAlerts,
-  mockDeviceStatus,
+  mockDevices,
   mockCalibration,
-  mockConfiguration,
+  mockConfigurationList,
   mockAnalytics,
   mockResearchMetrics,
   mockAuditLogs,
   mockUsers,
 } from './mock/ivMockData.js';
 
-// Base API configuration
+// Base API configuration (Points at Spring Boot port 8080 by default)
 export const API_BASE = window.__IVMONITOR_API_BASE__ || 'http://localhost:8080';
 export const TOKEN_KEY = 'ivmonitor_token';
 export const USER_KEY = 'ivmonitor_user';
 
-// State-level toggle: Set to true for software-only demo mode
+// State-level toggle: default to true for standalone PoC demo
 let _isMockMode = true;
 
 export function setMockMode(val) {
@@ -65,28 +75,30 @@ export const ENDPOINTS = {
   AUTH_LOGIN: '/api/auth/login',
   DEVICE_DATA: '/api/device/data',
   DASHBOARD_SUMMARY: '/api/dashboard/summary',
-  DASHBOARD_BED: (bedId) => `/api/dashboard/bed/${bedId}`,
-  DASHBOARD_READINGS: (bedId) => `/api/dashboard/bed/${bedId}/readings`,
-  EVENTS: '/api/events',
-  EVENTS_BED: (bedId) => `/api/events/${bedId}`,
+  DASHBOARD_BED: (bedCode) => `/api/dashboard/bed/${bedCode}`,
+  DASHBOARD_READINGS: (bedCode) => `/api/dashboard/bed/${bedCode}/readings?limit=200`,
+  EVENTS: '/api/events?page=0&size=50',
+  EVENTS_BED: (bedId) => `/api/events/${bedId}?page=0&size=50`,
   EVENT_DETAILS: (eventId) => `/api/events/details/${eventId}`,
-  ALERTS: '/api/alerts',
+  ALERTS: '/api/alerts?page=0&size=50',
   ALERT_ACKNOWLEDGE: (id) => `/api/alerts/${id}/acknowledge`,
   ALERT_RESOLVE: (id) => `/api/alerts/${id}/resolve`,
   ANALYTICS: '/api/analytics',
   DEVICES: '/api/devices',
   DEVICE_DETAILS: (id) => `/api/devices/${id}`,
-  AUDIT: '/api/audit',
+  AUDIT: '/api/audit?page=0&size=50',
   CONFIGURATION: '/api/configuration',
-  CALIBRATION: (bedId) => `/api/calibration/${bedId}`,
-  CALIBRATION_TARE: (bedId) => `/api/calibration/${bedId}/tare`,
+  CONFIGURATION_UPDATE: (username = 'admin') => `/api/configuration?username=${encodeURIComponent(username)}`,
+  CALIBRATION: (bedCode) => `/api/calibration/${bedCode}`,
+  CALIBRATION_SAVE: (bedCode, username = 'biomed_engineer') => `/api/calibration/${bedCode}?username=${encodeURIComponent(username)}`,
+  CALIBRATION_TARE: (bedCode, username = 'biomed_engineer') => `/api/calibration/${bedCode}/tare?username=${encodeURIComponent(username)}`,
   RESEARCH_METRICS: '/api/research/metrics',
 };
 
-// In-memory mock alert and audit states for interactive demo actions
+// In-memory mock states for interactive demo actions
 let activeMockAlerts = [...mockAlerts];
 let activeMockAudit = [...mockAuditLogs];
-let activeMockConfig = { ...mockConfiguration };
+let activeMockConfig = [...mockConfigurationList];
 let activeMockCalibration = { ...mockCalibration };
 
 // Generic REST request handler
@@ -104,7 +116,7 @@ async function request(path, options = {}) {
     let message = `Request failed (${res.status})`;
     try {
       const body = await res.json();
-      message = body.error || body.message || message;
+      message = body.message || body.error || message;
     } catch {
       /* non-json body fallback */
     }
@@ -115,8 +127,7 @@ async function request(path, options = {}) {
   return res.json();
 }
 
-// Helper to simulate short async latency in mock mode
-function mockDelay(ms = 80) {
+function mockDelay(ms = 60) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -134,59 +145,69 @@ export const api = {
     }
     return request(ENDPOINTS.AUTH_LOGIN, {
       method: 'POST',
-      body: JSON.stringify(credentials),
+      body: JSON.stringify({
+        username: credentials.username || credentials.email,
+        password: credentials.password
+      }),
     });
   },
 
   // 2. Dashboard Summary
+  // Backend returns: DashboardSummaryResponse { systemStatus, totalBeds, normalBeds, activeAlerts, physicalDevicesOnline, sensorChannelsOnline, beds: [...], timestamp }
   async getDashboardSummary() {
     if (_isMockMode) {
       await mockDelay();
-      return mockBeds.map(adaptBed);
+      return adaptDashboardSummary(mockDashboardSummary);
     }
     const raw = await request(ENDPOINTS.DASHBOARD_SUMMARY);
-    return Array.isArray(raw) ? raw.map(adaptBed) : [];
+    return adaptDashboardSummary(raw);
   },
 
   // 3. Bed Status
-  async getBedStatus(bedId) {
+  async getBedStatus(bedCode = 'BED_1') {
+    const code = bedCode.startsWith('BED_') ? bedCode : (bedCode === '2' ? 'BED_2' : 'BED_1');
     if (_isMockMode) {
       await mockDelay();
-      const bed = mockBeds.find((b) => String(b.bedId) === String(bedId)) || mockBeds[0];
+      const bed = mockBeds.find((b) => b.bedCode === code) || mockBeds[0];
       return adaptBed(bed);
     }
-    const raw = await request(ENDPOINTS.DASHBOARD_BED(bedId));
+    const raw = await request(ENDPOINTS.DASHBOARD_BED(code));
     return adaptBed(raw);
   },
 
   // 4. Bed Readings (Weight & Flow vs Time)
-  async getBedReadings(bedId) {
+  // Backend returns List<ReadingPoint> { timestamp, rawWeight, filteredWeight, flowRate, baseline }
+  async getBedReadings(bedCode = 'BED_1') {
+    const code = bedCode.startsWith('BED_') ? bedCode : (bedCode === '2' ? 'BED_2' : 'BED_1');
     if (_isMockMode) {
       await mockDelay();
-      return generateMockReadings(bedId, 30).map(adaptReading);
+      return generateMockReadings(code, 30).map(adaptReading);
     }
-    const raw = await request(ENDPOINTS.DASHBOARD_READINGS(bedId));
-    return Array.isArray(raw) ? raw.map(adaptReading) : [];
+    const raw = await request(ENDPOINTS.DASHBOARD_READINGS(code));
+    const list = Array.isArray(raw) ? raw : (raw.readings || []);
+    return list.map(adaptReading);
   },
 
   // 5. Current Events
+  // Backend returns Page<EventResponse>
   async getCurrentEvents() {
     if (_isMockMode) {
       await mockDelay();
       return mockEvents.map(adaptEvent);
     }
     const raw = await request(ENDPOINTS.EVENTS);
-    return Array.isArray(raw) ? raw.map(adaptEvent) : [];
+    return extractPageContent(raw).map(adaptEvent);
   },
 
   // 6. Bed Events
-  async getBedEvents(bedId) {
+  async getBedEvents(bedId = 1) {
     if (_isMockMode) {
       await mockDelay();
-      return mockEvents.filter((e) => String(e.bedId) === String(bedId)).map(adaptEvent);
+      const targetBedCode = String(bedId).includes('2') ? 'BED_2' : 'BED_1';
+      return mockEvents.filter((e) => e.bedCode === targetBedCode).map(adaptEvent);
     }
     const raw = await request(ENDPOINTS.EVENTS_BED(bedId));
-    return Array.isArray(raw) ? raw.map(adaptEvent) : [];
+    return extractPageContent(raw).map(adaptEvent);
   },
 
   // 7. Event Details
@@ -201,160 +222,196 @@ export const api = {
   },
 
   // 8. Alerts List
+  // Backend returns Page<AlertResponse>
   async getAlerts() {
     if (_isMockMode) {
       await mockDelay();
       return activeMockAlerts.map(adaptAlert);
     }
     const raw = await request(ENDPOINTS.ALERTS);
-    return Array.isArray(raw) ? raw.map(adaptAlert) : [];
+    return extractPageContent(raw).map(adaptAlert);
   },
 
   // 9. Acknowledge Alert
-  async acknowledgeAlert(alertId, userName = 'Priya Sharma') {
+  async acknowledgeAlert(alertId, userName = 'nurse_user') {
     if (_isMockMode) {
       await mockDelay();
       activeMockAlerts = activeMockAlerts.map((a) =>
         String(a.id) === String(alertId)
-          ? { ...a, status: 'ACKNOWLEDGED', acknowledgedAt: new Date().toISOString(), acknowledgedByName: userName }
+          ? { ...a, status: 'ACKNOWLEDGED', acknowledgedAt: new Date().toISOString(), acknowledgedBy: userName }
           : a
       );
       activeMockAudit.unshift({
-        id: `AUD-${Date.now()}`,
+        id: `aud-${Date.now()}`,
         timestamp: new Date().toISOString(),
-        user: userName,
-        role: 'NURSE',
-        action: 'Alert Acknowledged',
-        bed: 'Bed 2',
-        event: alertId,
+        username: userName,
+        action: 'ALERT_ACKNOWLEDGED',
+        entityType: 'ALERT',
+        entityId: String(alertId),
+        bedCode: 'BED_2',
         result: 'SUCCESS',
       });
       return { success: true, alertId, status: 'ACKNOWLEDGED' };
     }
-    return request(ENDPOINTS.ALERT_ACKNOWLEDGE(alertId), { method: 'POST' });
+    return request(ENDPOINTS.ALERT_ACKNOWLEDGE(alertId), {
+      method: 'POST',
+      body: JSON.stringify({ userId: userName }),
+    });
   },
 
   // 10. Resolve Alert
-  async resolveAlert(alertId, userName = 'Priya Sharma') {
+  async resolveAlert(alertId, userName = 'nurse_user') {
     if (_isMockMode) {
       await mockDelay();
       activeMockAlerts = activeMockAlerts.map((a) =>
         String(a.id) === String(alertId)
-          ? { ...a, status: 'RESOLVED', resolvedAt: new Date().toISOString() }
+          ? { ...a, status: 'RESOLVED', resolvedAt: new Date().toISOString(), resolvedBy: userName }
           : a
       );
       activeMockAudit.unshift({
-        id: `AUD-${Date.now()}`,
+        id: `aud-${Date.now()}`,
         timestamp: new Date().toISOString(),
-        user: userName,
-        role: 'NURSE',
-        action: 'Alert Resolved',
-        bed: 'Bed 2',
-        event: alertId,
+        username: userName,
+        action: 'ALERT_RESOLVED',
+        entityType: 'ALERT',
+        entityId: String(alertId),
+        bedCode: 'BED_2',
         result: 'SUCCESS',
       });
       return { success: true, alertId, status: 'RESOLVED' };
     }
-    return request(ENDPOINTS.ALERT_RESOLVE(alertId), { method: 'POST' });
+    return request(ENDPOINTS.ALERT_RESOLVE(alertId), {
+      method: 'POST',
+      body: JSON.stringify({ userId: userName }),
+    });
   },
 
   // 11. Analytics
+  // Backend returns AnalyticsResponse
   async getAnalytics() {
     if (_isMockMode) {
       await mockDelay();
-      return mockAnalytics;
+      return adaptAnalytics(mockAnalytics);
     }
-    return request(ENDPOINTS.ANALYTICS);
+    const raw = await request(ENDPOINTS.ANALYTICS);
+    return adaptAnalytics(raw);
   },
 
   // 12. Device Status
+  // Backend returns List<DeviceResponse>
   async getDeviceStatus() {
     if (_isMockMode) {
       await mockDelay();
-      return {
-        ...mockDeviceStatus,
-        devices: mockDeviceStatus.devices.map(adaptDeviceStatus),
-      };
+      return mockDevices.map(adaptDevice);
     }
     const raw = await request(ENDPOINTS.DEVICES);
-    return {
-      systemStatus: raw.systemStatus || 'ONLINE',
-      serverTime: raw.serverTime || new Date().toISOString(),
-      devices: Array.isArray(raw.devices) ? raw.devices.map(adaptDeviceStatus) : [],
-    };
+    return extractPageContent(raw).map(adaptDevice);
   },
 
   // 13. Audit Logs
+  // Backend returns Page<AuditLogResponse>
   async getAuditLogs() {
     if (_isMockMode) {
       await mockDelay();
-      return [...activeMockAudit];
+      return activeMockAudit.map(adaptAuditLog);
     }
-    return request(ENDPOINTS.AUDIT);
+    const raw = await request(ENDPOINTS.AUDIT);
+    return extractPageContent(raw).map(adaptAuditLog);
   },
 
-  // 14. Configuration
+  // 14. Configuration List
+  // Backend returns List<ConfigurationResponse>
   async getConfiguration() {
     if (_isMockMode) {
       await mockDelay();
-      return { ...activeMockConfig };
+      return adaptConfigurationList(activeMockConfig);
     }
-    return request(ENDPOINTS.CONFIGURATION);
+    const raw = await request(ENDPOINTS.CONFIGURATION);
+    return adaptConfigurationList(raw);
   },
 
   // 15. Update Configuration
-  async updateConfiguration(newConfig) {
+  // Backend takes ConfigurationRequest { configKey, configValue, description }
+  async updateConfiguration(configKey, configValue, description = '', username = 'admin') {
     if (_isMockMode) {
       await mockDelay();
-      activeMockConfig = { ...activeMockConfig, ...newConfig, lastUpdated: new Date().toISOString() };
-      return { success: true, configuration: activeMockConfig };
+      const existing = activeMockConfig.find(c => c.configKey === configKey);
+      if (existing) {
+        existing.configValue = String(configValue);
+        if (description) existing.description = description;
+        existing.updatedAt = new Date().toISOString();
+        existing.updatedBy = username;
+      } else {
+        activeMockConfig.push({
+          id: Date.now(),
+          configKey,
+          configValue: String(configValue),
+          description,
+          updatedAt: new Date().toISOString(),
+          updatedBy: username,
+        });
+      }
+      return { success: true, configuration: adaptConfigurationList(activeMockConfig) };
     }
-    return request(ENDPOINTS.CONFIGURATION, {
+    return request(ENDPOINTS.CONFIGURATION_UPDATE(username), {
       method: 'PUT',
-      body: JSON.stringify(newConfig),
+      body: JSON.stringify({ configKey, configValue: String(configValue), description }),
     });
   },
 
   // 16. Calibration Status
-  async getCalibration(bedId) {
+  // Backend returns CalibrationResponse
+  async getCalibration(bedCode = 'BED_1') {
+    const code = bedCode.startsWith('BED_') ? bedCode : (bedCode === '2' ? 'BED_2' : 'BED_1');
     if (_isMockMode) {
       await mockDelay();
-      return activeMockCalibration[String(bedId)] || activeMockCalibration['1'];
+      return adaptCalibration(activeMockCalibration[code] || activeMockCalibration['BED_1']);
     }
-    return request(ENDPOINTS.CALIBRATION(bedId));
+    const raw = await request(ENDPOINTS.CALIBRATION(code));
+    return adaptCalibration(raw);
   },
 
   // 17. Save Calibration
-  async saveCalibration(bedId, calData) {
+  // Backend takes CalibrationRequest { calibrationFactor, zeroOffset, knownReferenceWeight, notes }
+  async saveCalibration(bedCode = 'BED_1', calData = {}, username = 'biomed_engineer') {
+    const code = bedCode.startsWith('BED_') ? bedCode : (bedCode === '2' ? 'BED_2' : 'BED_1');
     if (_isMockMode) {
       await mockDelay();
-      activeMockCalibration[String(bedId)] = {
-        ...activeMockCalibration[String(bedId)],
+      activeMockCalibration[code] = {
+        ...activeMockCalibration[code],
         ...calData,
-        lastCalibrationTime: new Date().toISOString(),
+        calibratedAt: new Date().toISOString(),
+        calibratedBy: username,
       };
-      return { success: true, bedId, calibration: activeMockCalibration[String(bedId)] };
+      return adaptCalibration(activeMockCalibration[code]);
     }
-    return request(ENDPOINTS.CALIBRATION(bedId), {
+    const raw = await request(ENDPOINTS.CALIBRATION_SAVE(code, username), {
       method: 'POST',
       body: JSON.stringify(calData),
     });
+    return adaptCalibration(raw);
   },
 
   // 18. Tare Bed
-  async tareBed(bedId) {
+  async tareBed(bedCode = 'BED_1', username = 'biomed_engineer') {
+    const code = bedCode.startsWith('BED_') ? bedCode : (bedCode === '2' ? 'BED_2' : 'BED_1');
     if (_isMockMode) {
       await mockDelay();
-      if (activeMockCalibration[String(bedId)]) {
-        activeMockCalibration[String(bedId)].zeroTareStatus = 'ZEROED';
-        activeMockCalibration[String(bedId)].lastCalibrationTime = new Date().toISOString();
+      if (activeMockCalibration[code]) {
+        activeMockCalibration[code].zeroOffset = 0.0;
+        activeMockCalibration[code].calibratedAt = new Date().toISOString();
+        activeMockCalibration[code].calibratedBy = username;
       }
-      return { success: true, bedId, zeroTareStatus: 'ZEROED', timestamp: new Date().toISOString() };
+      return adaptCalibration(activeMockCalibration[code]);
     }
-    return request(ENDPOINTS.CALIBRATION_TARE(bedId), { method: 'POST' });
+    const raw = await request(ENDPOINTS.CALIBRATION_TARE(code, username), {
+      method: 'POST',
+    });
+    return adaptCalibration(raw);
   },
 
   // 19. Research Metrics
+  // Backend returns ResearchMetricsResponse
   async getResearchMetrics() {
     if (_isMockMode) {
       await mockDelay();
@@ -362,27 +419,18 @@ export const api = {
     }
     return request(ENDPOINTS.RESEARCH_METRICS);
   },
-
-  // Legacy mappings for backwards-compatibility
-  getWardStatus: (wardId) => api.getDashboardSummary(),
-  getWardAlerts: (wardId) => api.getAlerts(),
-  getAlertFrequency: () => api.getAnalytics().then((a) => a.eventTypesDistribution || []),
 };
 
 // ==================================================
 // REAL-TIME SUBSCRIPTION ABSTRACTION
 // ==================================================
-/**
- * Polling/stream abstraction that prepares the UI for future WebSockets or SSE.
- * Allows components to subscribe to updates without direct protocol dependencies.
- */
-export function subscribeToBedUpdates(bedId, callback, intervalMs = 3000) {
+export function subscribeToBedUpdates(bedCode, callback, intervalMs = 3000) {
   let isCancelled = false;
 
   const poll = async () => {
     if (isCancelled) return;
     try {
-      const data = bedId ? await api.getBedStatus(bedId) : await api.getDashboardSummary();
+      const data = bedCode ? await api.getBedStatus(bedCode) : await api.getDashboardSummary();
       if (!isCancelled) callback(null, data);
     } catch (err) {
       if (!isCancelled) callback(err, null);

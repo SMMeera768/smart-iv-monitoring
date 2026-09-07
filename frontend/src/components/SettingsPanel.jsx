@@ -5,90 +5,138 @@ import { api } from '../api.js';
  * SMART MULTI-BED IV WORKFLOW & EVENT MONITORING PLATFORM
  * SettingsPanel Component
  *
- * Configurable thresholds for backend rule engine and anomaly detection:
- * - Low-volume threshold
- * - Flow interruption threshold
- * - Minimum interruption duration
- * - Bag replacement threshold
- * - Drift threshold
- * - Anomaly threshold
- * - Sampling interval
- *
- * Labeled dynamically as "Configured by backend".
+ * Consumes List<ConfigurationResponse> from GET /api/configuration.
+ * Updates via PUT /api/configuration?username=admin.
+ * Displays all parameterized pipeline & rule thresholds dynamically from backend.
  */
 
-export default function SettingsPanel() {
-  const [config, setConfig] = useState(null);
-  const [formData, setFormData] = useState({});
+export default function SettingsPanel({ user = {} }) {
+  const [configList, setConfigList] = useState([]);
+  const [editValues, setEditValues] = useState({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingKey, setSavingKey] = useState(null);
   const [statusMsg, setStatusMsg] = useState({ text: '', isError: false });
 
-  useEffect(() => {
-    let active = true;
+  function loadConfig() {
     setLoading(true);
-
     api.getConfiguration()
-      .then((cfg) => {
-        if (active) {
-          setConfig(cfg);
-          setFormData(cfg);
-          setLoading(false);
-        }
+      .then((list) => {
+        const safeList = Array.isArray(list) ? list : [];
+        setConfigList(safeList);
+        const map = {};
+        safeList.forEach((c) => {
+          map[c.configKey] = c.configValue;
+        });
+        setEditValues(map);
+        setLoading(false);
       })
       .catch((err) => {
-        if (active) {
-          setStatusMsg({ text: `Failed to load config: ${err.message}`, isError: true });
-          setLoading(false);
-        }
+        setStatusMsg({ text: `Failed to load settings: ${err.message}`, isError: true });
+        setLoading(false);
       });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  function handleChange(field, value) {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: parseFloat(value) || value,
-    }));
   }
 
-  async function handleSave(e) {
-    e.preventDefault();
-    setSaving(true);
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  function handleValueChange(key, val) {
+    setEditValues((prev) => ({ ...prev, [key]: val }));
+  }
+
+  async function handleSaveKey(key, originalDesc) {
+    setSavingKey(key);
     setStatusMsg({ text: '', isError: false });
+    const username = user.username || user.fullName || 'admin';
 
     try {
-      const res = await api.updateConfiguration(formData);
-      setConfig(res.configuration || formData);
-      setStatusMsg({ text: 'Configuration saved and broadcast to backend rule engine.', isError: false });
+      await api.updateConfiguration(key, editValues[key], originalDesc, username);
+      setStatusMsg({ text: `Configuration "${key}" successfully saved to backend.`, isError: false });
+      loadConfig();
     } catch (err) {
-      setStatusMsg({ text: `Error updating settings: ${err.message}`, isError: true });
+      setStatusMsg({ text: `Error updating "${key}": ${err.message}`, isError: true });
     } finally {
-      setSaving(false);
+      setSavingKey(null);
       setTimeout(() => setStatusMsg({ text: '', isError: false }), 4000);
     }
   }
 
-  if (loading) {
-    return <div className="loading-state">Loading backend configuration…</div>;
+  if (loading && configList.length === 0) {
+    return <div className="loading-state">Loading backend configuration registry…</div>;
+  }
+
+  // Categorize configuration items
+  const signalConfigs = configList.filter(c => c.configKey.startsWith('signal.'));
+  const ruleConfigs = configList.filter(c => c.configKey.startsWith('rules.'));
+  const aiConfigs = configList.filter(c => c.configKey.startsWith('ai.'));
+  const otherConfigs = configList.filter(c => !c.configKey.startsWith('signal.') && !c.configKey.startsWith('rules.') && !c.configKey.startsWith('ai.'));
+
+  function renderGroup(title, items, note) {
+    if (items.length === 0) return null;
+
+    return (
+      <div className="settings-section">
+        <h3>{title}</h3>
+        {note && <p className="section-note">{note}</p>}
+
+        <div className="settings-table-wrapper">
+          <table className="data-table settings-table">
+            <thead>
+              <tr>
+                <th style={{ width: '28%' }}>Parameter Key</th>
+                <th style={{ width: '30%' }}>Description</th>
+                <th style={{ width: '22%' }}>Configured Value</th>
+                <th style={{ width: '20%' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const isModified = editValues[item.configKey] !== item.configValue;
+                const isSaving = savingKey === item.configKey;
+
+                return (
+                  <tr key={item.configKey}>
+                    <td className="font-mono text-strong">{item.configKey}</td>
+                    <td className="text-muted">{item.description}</td>
+                    <td>
+                      <input
+                        type="text"
+                        className="input-text font-mono inline-config-input"
+                        value={editValues[item.configKey] ?? ''}
+                        onChange={(e) => handleValueChange(item.configKey, e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className={`btn-primary-sm ${isModified ? 'btn-save-active' : ''}`}
+                        disabled={isSaving || !isModified}
+                        onClick={() => handleSaveKey(item.configKey, item.description)}
+                      >
+                        {isSaving ? 'Saving…' : 'Update'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="settings-panel-container">
       <div className="panel-header-row">
         <div>
-          <h2>Platform Settings & Event Thresholds</h2>
+          <h2>System Configuration &amp; Event Thresholds</h2>
           <p className="panel-subtitle">
-            Scientific thresholds parameterized and stored in backend configuration.
+            Parameterized thresholds stored in PostgreSQL (<code>system_configuration</code>).
           </p>
         </div>
 
-        <span className="source-tag">
-          {config?.source || 'Configured by backend'}
-        </span>
+        <span className="source-tag">Configured by Backend</span>
       </div>
 
       {statusMsg.text && (
@@ -97,129 +145,31 @@ export default function SettingsPanel() {
         </div>
       )}
 
-      <form onSubmit={handleSave} className="settings-form">
-        <div className="settings-section">
-          <h3>1. Volume & Flow Interruption Thresholds</h3>
-          <p className="section-note">
-            Controls critical alert generation during active patient infusion.
-          </p>
+      <div className="settings-sections-list">
+        {renderGroup(
+          '1. IV Workflow Event Detection Rules',
+          ruleConfigs,
+          'Controls flow interruption, low volume alert, and container replacement thresholds.'
+        )}
 
-          <div className="settings-grid">
-            <div className="form-field">
-              <label>Low-Volume Trigger Threshold</label>
-              <div className="input-with-unit">
-                <input
-                  type="number"
-                  step="1"
-                  value={formData.lowVolumeThreshold ?? 50}
-                  onChange={(e) => handleChange('lowVolumeThreshold', e.target.value)}
-                />
-                <span className="unit-label">grams / mL</span>
-              </div>
-              <small>Triggers LOW_VOLUME alarm when weight drops below this value.</small>
-            </div>
+        {renderGroup(
+          '2. Signal Processing Pipeline',
+          signalConfigs,
+          'Rolling window moving-average and derivative flow smoothing parameters.'
+        )}
 
-            <div className="form-field">
-              <label>Flow Interruption Cutoff</label>
-              <div className="input-with-unit">
-                <input
-                  type="number"
-                  step="0.1"
-                  value={formData.flowInterruptionThreshold ?? 0.5}
-                  onChange={(e) => handleChange('flowInterruptionThreshold', e.target.value)}
-                />
-                <span className="unit-label">mL / hr</span>
-              </div>
-              <small>Minimum flow rate below which occlusion is suspected.</small>
-            </div>
+        {renderGroup(
+          '3. AI Anomaly & Drift Thresholds',
+          aiConfigs,
+          'Cutoff values for Isolation Forest baseline creep and stuck-sensor detection.'
+        )}
 
-            <div className="form-field">
-              <label>Minimum Interruption Persistence</label>
-              <div className="input-with-unit">
-                <input
-                  type="number"
-                  step="10"
-                  value={formData.minInterruptionDurationSec ?? 180}
-                  onChange={(e) => handleChange('minInterruptionDurationSec', e.target.value)}
-                />
-                <span className="unit-label">seconds</span>
-              </div>
-              <small>Prevents false alarms caused by brief transient tube movement.</small>
-            </div>
-
-            <div className="form-field">
-              <label>Bag Replacement Minimum Delta</label>
-              <div className="input-with-unit">
-                <input
-                  type="number"
-                  step="10"
-                  value={formData.bagReplacementThreshold ?? 200}
-                  onChange={(e) => handleChange('bagReplacementThreshold', e.target.value)}
-                />
-                <span className="unit-label">grams</span>
-              </div>
-              <small>Positive step change required to log BAG_REPLACEMENT event.</small>
-            </div>
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <h3>2. AI Anomaly & Drift Parameters</h3>
-          <p className="section-note">
-            Isolation Forest score cutoffs for sensor drift and signal anomalies.
-          </p>
-
-          <div className="settings-grid">
-            <div className="form-field">
-              <label>Sensor Drift Rate Threshold</label>
-              <div className="input-with-unit">
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.driftThreshold ?? 0.15}
-                  onChange={(e) => handleChange('driftThreshold', e.target.value)}
-                />
-                <span className="unit-label">g / min</span>
-              </div>
-              <small>Non-physiological upward slope flagging baseline creep.</small>
-            </div>
-
-            <div className="form-field">
-              <label>Isolation Forest Anomaly Score Cutoff</label>
-              <div className="input-with-unit">
-                <input
-                  type="number"
-                  step="0.05"
-                  value={formData.anomalyThreshold ?? -0.25}
-                  onChange={(e) => handleChange('anomalyThreshold', e.target.value)}
-                />
-                <span className="unit-label">score</span>
-              </div>
-              <small>Scores below this cutoff flag uncharacteristic sensor noise.</small>
-            </div>
-
-            <div className="form-field">
-              <label>ADC Sampling Interval</label>
-              <div className="input-with-unit">
-                <input
-                  type="number"
-                  step="10"
-                  value={formData.samplingIntervalMs ?? 100}
-                  onChange={(e) => handleChange('samplingIntervalMs', e.target.value)}
-                />
-                <span className="unit-label">ms (10 Hz)</span>
-              </div>
-              <small>Digitizer sampling cadence for dual HX711 modules.</small>
-            </div>
-          </div>
-        </div>
-
-        <div className="form-action-footer">
-          <button type="submit" className="btn-primary" disabled={saving}>
-            {saving ? 'Saving to Backend…' : 'Save Configuration'}
-          </button>
-        </div>
-      </form>
+        {renderGroup(
+          '4. Gateway & System Parameters',
+          otherConfigs,
+          'Hardware timeout and device connectivity parameters.'
+        )}
+      </div>
     </div>
   );
 }

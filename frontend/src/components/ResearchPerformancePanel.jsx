@@ -5,10 +5,10 @@ import { api } from '../api.js';
  * SMART MULTI-BED IV WORKFLOW & EVENT MONITORING PLATFORM
  * ResearchPerformancePanel Component
  *
- * SPECIFICATION REQUIREMENT (Section 11 & 35):
- * DO NOT hard-code fake experimental results (e.g. 96.2% accuracy, 0.42g MAE).
- * For now, all experimental benchmark metrics must show:
- * "Awaiting experimental data" / "No experimental results available."
+ * Consumes ResearchMetricsResponse from GET /api/research/metrics.
+ * STRICT COMPLIANCE (Section 10 & 35):
+ * All metrics explicitly labelled as "Development/Synthetic data — not validated experimental results".
+ * Physical laboratory values are marked "Awaiting experimental data".
  */
 
 export default function ResearchPerformancePanel() {
@@ -33,82 +33,91 @@ export default function ResearchPerformancePanel() {
     };
   }, []);
 
-  const benchmarkItems = [
-    { key: 'accuracy', label: 'Classification Accuracy', unit: '%', desc: 'Event state classification over verified infusion cycles.' },
-    { key: 'precision', label: 'Precision (PPV)', unit: '%', desc: 'Positive predictive value for critical flow stoppage.' },
-    { key: 'recall', label: 'Recall (Sensitivity)', unit: '%', desc: 'Sensitivity in capturing subtle occlusion events.' },
-    { key: 'f1Score', label: 'F1 Score', unit: '', desc: 'Harmonic mean of precision and recall.' },
-    { key: 'mae', label: 'Weight MAE', unit: 'g', desc: 'Mean Absolute Error against precision calibrated reference balance.' },
-    { key: 'rmse', label: 'Weight RMSE', unit: 'g', desc: 'Root Mean Square Error capturing transient noise peaks.' },
-    { key: 'flowRateMae', label: 'Flow Rate MAE', unit: 'mL/hr', desc: 'Error between numeric derivative and physical gravimetric flow.' },
-    { key: 'detectionLatency', label: 'Detection Latency', unit: 'ms', desc: 'Median elapsed time from occlusion to alarm emission.' },
-    { key: 'driftDetectionRate', label: 'AI Drift Detection Rate', unit: '%', desc: 'Isolation Forest accuracy on synthetic/real sensor drift.' },
+  const benchmarkDefinitions = [
+    { key: 'eventAccuracy', label: 'Event Classification Accuracy', unit: '%', desc: 'Accuracy in classifying normal flow, occlusion, low volume, and container changes.' },
+    { key: 'eventPrecision', label: 'Precision (PPV)', unit: '%', desc: 'Positive predictive value for critical flow stoppage and occlusion.' },
+    { key: 'eventRecall', label: 'Recall (Sensitivity)', unit: '%', desc: 'Sensitivity in detecting subtle occlusion and low-volume states.' },
+    { key: 'eventF1Score', label: 'F1 Score', unit: '', desc: 'Harmonic mean of precision and recall over all event classes.' },
+    { key: 'meanAbsoluteErrorWeightG', label: 'Mass Estimation MAE', unit: 'g', desc: 'Mean Absolute Error against precision reference balance.' },
+    { key: 'rootMeanSquareErrorWeightG', label: 'Mass Estimation RMSE', unit: 'g', desc: 'Root Mean Square Error capturing high-frequency noise spikes.' },
+    { key: 'flowRateMaeGPerMin', label: 'Flow Rate MAE', unit: 'g/min', desc: 'Error between numerical derivative flow and true gravimetric rate.' },
+    { key: 'averageDetectionLatencyMs', label: 'Detection Latency', unit: 'ms', desc: 'Mean elapsed time from physical occlusion to alarm triggering.' },
+    { key: 'aiDriftDetectionRate', label: 'AI Drift Detection Rate', unit: '%', desc: 'Isolation Forest accuracy in catching non-physiological baseline creep.' },
   ];
 
   return (
     <div className="research-performance-container">
       <div className="panel-header-row">
         <div>
-          <h2>Research Validation & Benchmark Metrics</h2>
+          <h2>Research Validation &amp; Benchmark Metrics</h2>
           <p className="panel-subtitle">
-            Scientific performance benchmarks awaiting completed two-bed physical experimental trials.
+            Scientific performance evaluation framework awaiting physical load-cell trial completion.
           </p>
         </div>
+
+        <span className="source-tag">Status: Pre-Hardware Laboratory Phase</span>
       </div>
 
-      {/* Mandatory Research Integrity Alert */}
+      {/* Mandatory Research Integrity Banner */}
       <div className="research-integrity-banner">
         <div className="integrity-icon">🔬</div>
         <div className="integrity-text">
-          <strong>Research Integrity Notice (Section 11 & 35)</strong>
+          <strong>Research Integrity Notice (Section 10 &amp; 35)</strong>
           <p>
-            No simulated or arbitrary numbers are presented as validated laboratory results.
-            All experimental evaluation metrics will remain <em>"Awaiting experimental data"</em> until
-            the independent hardware team completes physical load-cell testing, gravimetric flow experiments,
-            and two-bed cross-talk trials.
+            {metrics?.disclaimer ||
+              'Development/Synthetic data — not validated experimental results. All experimental evaluation metrics remain "Awaiting experimental data" until the hardware team completes benchtop testing and validated datasets are recorded.'}
           </p>
         </div>
       </div>
 
-      {loading && <div className="loading-state">Loading metric definitions…</div>}
+      {loading && <div className="loading-state">Loading research benchmark registers…</div>}
 
       {!loading && (
         <>
           {/* Benchmarks Grid */}
           <div className="benchmarks-cards-grid">
-            {benchmarkItems.map((item) => (
-              <div key={item.key} className="benchmark-card">
-                <div className="bench-header">
-                  <h4>{item.label}</h4>
-                  <span className="pending-badge">Pending Hardware Validation</span>
+            {benchmarkDefinitions.map((item) => {
+              const rawVal = metrics?.[item.key];
+              const isNonZero = rawVal != null && Number(rawVal) > 0;
+
+              return (
+                <div key={item.key} className="benchmark-card">
+                  <div className="bench-header">
+                    <h4>{item.label}</h4>
+                    <span className="pending-badge">Pending Laboratory Validation</span>
+                  </div>
+
+                  <div className="bench-val-box">
+                    <span className="bench-pending-text">
+                      {isNonZero
+                        ? `${Number(rawVal).toFixed(2)} ${item.unit} (Development Baseline)`
+                        : 'Awaiting experimental data'}
+                    </span>
+                  </div>
+
+                  <p className="bench-desc">{item.desc}</p>
                 </div>
-                <div className="bench-val-box">
-                  <span className="bench-pending-text">
-                    {metrics?.[item.key] || 'Awaiting experimental data'}
-                  </span>
-                </div>
-                <p className="bench-desc">{item.desc}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Confusion Matrix Placeholder */}
+          {/* Confusion Matrix Section */}
           <div className="confusion-matrix-card">
             <div className="matrix-header">
-              <h3>Confusion Matrix (Multi-Class Event Detection)</h3>
+              <h3>Multi-Class Event Confusion Matrix</h3>
               <span className="pending-badge">Awaiting experimental data</span>
             </div>
             <p className="card-subtext">
-              Target classes: NORMAL_FLOW, FLOW_INTERRUPTION, LOW_VOLUME, BAG_REPLACEMENT, SENSOR_DRIFT.
+              Target event classes: <code>NORMAL_FLOW</code>, <code>FLOW_INTERRUPTION</code>, <code>LOW_VOLUME</code>, <code>BAG_REPLACEMENT</code>, <code>SENSOR_DRIFT</code>.
             </p>
 
             <div className="matrix-placeholder-box">
               <div className="matrix-placeholder-content">
                 <span className="placeholder-icon">📊</span>
-                <strong>No experimental results available</strong>
+                <strong>Awaiting experimental data</strong>
                 <p>
                   Empirical confusion matrix will be rendered after collecting controlled trial recordings
-                  from the physical dual-bed test rig.
+                  from the physical dual-bed load-cell rig. No synthetic matrix values are shown as real.
                 </p>
               </div>
             </div>

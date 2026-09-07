@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
 /**
@@ -114,7 +114,9 @@ export default function EventsPanel() {
                   <tr key={evt.id} className={`event-row severity-${evt.severity.toLowerCase()}`}>
                     <td className="font-mono">{evt.id}</td>
                     <td>
-                      <span className="bed-tag">Bed {evt.bedId}</span>
+                      <span className="bed-tag">
+                        {evt.bedCode ? evt.bedCode.replace('_', ' ') : `Bed ${evt.bedId}`}
+                      </span>
                     </td>
                     <td>
                       <strong>{evt.type}</strong>
@@ -129,7 +131,7 @@ export default function EventsPanel() {
                     <td>
                       {evt.evidenceScore != null ? (
                         <span className="evidence-badge">
-                          {(evt.evidenceScore * 100).toFixed(0)}%
+                          {Math.round(evt.evidenceScore)}%
                         </span>
                       ) : (
                         '—'
@@ -169,7 +171,9 @@ export default function EventsPanel() {
               <div className="detail-grid">
                 <div className="detail-item">
                   <label>Bed Identifier</label>
-                  <span>Bed {selectedEvent.bedId}</span>
+                  <span>
+                    {selectedEvent.bedCode ? selectedEvent.bedCode.replace('_', ' ') : `Bed ${selectedEvent.bedId}`}
+                  </span>
                 </div>
                 <div className="detail-item">
                   <label>Event Type</label>
@@ -185,7 +189,7 @@ export default function EventsPanel() {
                   <label>Evidence Score</label>
                   <span>
                     {selectedEvent.evidenceScore != null
-                      ? `${(selectedEvent.evidenceScore * 100).toFixed(1)}% (${selectedEvent.evidenceScore})`
+                      ? `${Math.round(selectedEvent.evidenceScore)}% (Score: ${selectedEvent.evidenceScore}/100)`
                       : 'N/A'}
                   </span>
                 </div>

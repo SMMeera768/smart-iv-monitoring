@@ -5,8 +5,8 @@
  * BedCard Component — Answers the 5 core clinical questions:
  * 1. WHAT IS HAPPENING? -> Weight, Filtered Weight, Flow Rate, Fill %
  * 2. IS SOMETHING WRONG? -> Current Event, Evidence Score, Alert Priority
- * 3. WHICH BED? -> Bed 1 / Bed 2 identifier badge
- * 4. IS THE SENSOR HEALTHY? -> Sensor Status (Normal / Drift / Failure) + Device Connectivity
+ * 3. WHICH BED? -> Bed 1 / Bed 2 (BED_1 / BED_2) & Channel mapping
+ * 4. IS THE SENSOR HEALTHY? -> Sensor Status (Normal / Drift / Failure / AI Unavailable)
  * 5. WHAT ACTION IS REQUIRED? -> Acknowledge / Resolve interactive controls
  */
 
@@ -14,7 +14,6 @@ export default function BedCard({
   bed,
   onAcknowledge,
   onResolve,
-  onViewDetails,
   onViewCharts,
 }) {
   if (!bed) {
@@ -25,12 +24,10 @@ export default function BedCard({
     );
   }
 
-  // 7 UI States: LOADING, NORMAL, WARNING, CRITICAL, EMPTY, ERROR, OFFLINE
   const isOffline = bed.deviceStatus === 'OFFLINE';
-  const isError = bed.status === 'ERROR';
-  const isCritical = bed.alertPriority === 'CRITICAL' || bed.status === 'CRITICAL' || bed.currentEvent === 'LOW_VOLUME';
-  const isWarning = bed.alertPriority === 'WARNING' || bed.status === 'WARNING' || bed.currentEvent === 'FLOW_INTERRUPTION' || bed.sensorStatus === 'DRIFT';
-  const isFlowing = bed.flowStatus === 'ACTIVE' && bed.flowRate > 0.5;
+  const isCritical = bed.status === 'CRITICAL' || bed.currentEventType === 'LOW_VOLUME';
+  const isWarning = bed.status === 'WARNING' || bed.currentEventType === 'FLOW_INTERRUPTION' || bed.sensorStatus === 'DRIFT';
+  const isFlowing = bed.flowStatus === 'ACTIVE' && bed.flowRate > 0.1;
 
   let stateClass = 'state-normal';
   let statusBadgeLabel = 'Normal Operation';
@@ -40,13 +37,9 @@ export default function BedCard({
     stateClass = 'state-offline';
     statusBadgeLabel = 'Device Offline';
     statusBadgeClass = 'pill-offline';
-  } else if (isError) {
-    stateClass = 'state-error';
-    statusBadgeLabel = 'Sensor Error';
-    statusBadgeClass = 'pill-critical';
   } else if (isCritical) {
     stateClass = 'has-critical state-critical';
-    statusBadgeLabel = 'Critical Attention Required';
+    statusBadgeLabel = 'Attention Required';
     statusBadgeClass = 'pill-critical';
   } else if (isWarning) {
     stateClass = 'has-warning state-warning';
@@ -54,18 +47,24 @@ export default function BedCard({
     statusBadgeClass = 'pill-watch';
   }
 
-  // Fill percentage calculation
   const fillPct = Math.max(0, Math.min(100, bed.percentRemaining ?? 0));
   const fillClass = isCritical ? 'low' : isWarning ? 'watch' : '';
 
-  // Format timestamp
   const lastUpdatedDisplay = bed.lastUpdated
     ? new Date(bed.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : 'Just now';
 
+  // Format evidence score: integer 0-100
+  const evScoreFormatted = bed.evidenceScore != null
+    ? (bed.evidenceScore <= 1.0 && bed.evidenceScore > 0 ? `${(bed.evidenceScore * 100).toFixed(0)}%` : `${bed.evidenceScore}%`)
+    : null;
+
+  const bedDisplayName = bed.name || (bed.bedCode === 'BED_2' ? 'Bed 2' : 'Bed 1');
+  const channelDisplayName = bed.channelId || (bed.bedCode === 'BED_2' ? 'HX711_2' : 'HX711_1');
+
   return (
     <div className={`bed-card ${stateClass}`}>
-      {/* Visual Drip Gauge (Fill % + flow animation) */}
+      {/* Visual Drip Gauge (Fill % + Flow Animation) */}
       <div className="drip-gauge" aria-label={`Fill level ${fillPct}%`}>
         <div
           className={`drip-gauge-fill ${fillClass}`}
@@ -75,14 +74,14 @@ export default function BedCard({
       </div>
 
       <div className="bed-card-body">
-        {/* Q3: WHICH BED? + Telemetry Header */}
+        {/* Q3: WHICH BED? & Channel Assignment */}
         <div className="bed-card-head">
           <div>
             <div className="bed-identity-row">
-              <span className="bed-number">{bed.name || `Bed ${bed.bedId}`}</span>
-              <span className="bed-channel-badge">CH-{bed.channelId || bed.bedId}</span>
+              <span className="bed-number">{bedDisplayName}</span>
+              <span className="bed-channel-badge font-mono">{bed.bedCode} · {channelDisplayName}</span>
             </div>
-            <span className="bed-device-code">{bed.deviceId}</span>
+            <span className="bed-device-code font-mono">Device: {bed.deviceId}</span>
           </div>
 
           <div className="bed-head-badges">
@@ -96,12 +95,12 @@ export default function BedCard({
           </div>
         </div>
 
-        {/* Status Banner */}
+        {/* Status Row */}
         <div className="bed-status-banner-row">
           <span className={`bed-status-pill ${statusBadgeClass}`}>
             {statusBadgeLabel}
           </span>
-          {bed.aiAvailable === false ? (
+          {bed.aiAvailable === false || bed.sensorStatus === 'AI_UNAVAILABLE' ? (
             <span className="ai-unavailable-chip" title="Core IV monitoring active; AI anomaly model offline">
               AI UNAVAILABLE
             </span>
@@ -123,7 +122,7 @@ export default function BedCard({
             </div>
             <div className="metric-box">
               <span className="metric-label">Flow Rate</span>
-              <span className="metric-val">{bed.flowRate} <small>mL/hr</small></span>
+              <span className="metric-val">{bed.flowRate} <small>g/min</small></span>
               <span className="metric-sub status-indicator">
                 Status: <strong>{bed.flowStatus}</strong>
               </span>
@@ -141,31 +140,31 @@ export default function BedCard({
           <div className="section-title">Is something wrong?</div>
           <div className="event-info-box">
             <div className="event-primary-row">
-              <span className="event-name-tag">
-                Event: <strong>{bed.currentEvent || 'NORMAL_FLOW'}</strong>
+              <span className="event-name-tag font-mono">
+                Event: <strong>{bed.currentEventType || bed.currentEvent || 'NORMAL_FLOW'}</strong>
               </span>
               <span className={`priority-tag tag-${(bed.alertPriority || 'NORMAL').toLowerCase()}`}>
                 Priority: {bed.alertPriority || 'NORMAL'}
               </span>
             </div>
             <div className="evidence-score-row">
-              <span>Evidence Score:</span>
+              <span>Evidence Confidence Score:</span>
               <span className="evidence-val">
-                {bed.evidenceScore != null ? (
-                  <><strong>{(bed.evidenceScore * 100).toFixed(0)}%</strong> ({(bed.evidenceScore).toFixed(2)})</>
+                {evScoreFormatted ? (
+                  <strong>{evScoreFormatted}</strong>
                 ) : (
                   'Calculating…'
                 )}
               </span>
             </div>
             <div className="ai-telemetry-row">
-              <span>AI Drift: {bed.driftScore != null ? bed.driftScore.toFixed(2) : '0.00'}</span>
+              <span>Drift Score: {bed.driftScore != null ? bed.driftScore.toFixed(2) : '0.00'}</span>
               <span>Anomaly Score: {bed.anomalyScore != null ? bed.anomalyScore.toFixed(2) : '0.00'}</span>
             </div>
           </div>
         </div>
 
-        {/* Q5: WHAT ACTION IS REQUIRED? + Quick Actions */}
+        {/* Q5: WHAT ACTION IS REQUIRED? */}
         <div className="bed-card-footer">
           <div className="card-timestamp">
             Last update: <span>{lastUpdatedDisplay}</span>
@@ -176,8 +175,8 @@ export default function BedCard({
               <button
                 type="button"
                 className="btn-card-action btn-charts"
-                onClick={() => onViewCharts(bed.bedId)}
-                title="View Weight & Flow Charts"
+                onClick={() => onViewCharts(bed.bedCode)}
+                title="View Gravimetric Time-Series"
               >
                 Charts
               </button>
@@ -186,7 +185,7 @@ export default function BedCard({
               <button
                 type="button"
                 className="btn-card-action btn-ack"
-                onClick={() => onAcknowledge(bed.bedId)}
+                onClick={() => onAcknowledge(bed.bedCode)}
               >
                 Acknowledge
               </button>
@@ -195,7 +194,7 @@ export default function BedCard({
               <button
                 type="button"
                 className="btn-card-action btn-resolve"
-                onClick={() => onResolve(bed.bedId)}
+                onClick={() => onResolve(bed.bedCode)}
               >
                 Resolve
               </button>

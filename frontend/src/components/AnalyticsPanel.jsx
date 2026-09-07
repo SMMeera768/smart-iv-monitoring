@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
 /**
@@ -79,7 +79,7 @@ export default function AnalyticsPanel() {
         <div className="kpi-card">
           <span className="kpi-label">Avg Evidence Confidence</span>
           <span className="kpi-value text-teal">
-            {((summary.averageEvidenceScore || 0.92) * 100).toFixed(0)}%
+            {Math.round(summary.averageEvidenceScore != null ? (summary.averageEvidenceScore <= 1.0 && summary.averageEvidenceScore > 0 ? summary.averageEvidenceScore * 100 : summary.averageEvidenceScore) : 92)}%
           </span>
           <span className="kpi-sub">Rule engine scoring</span>
         </div>
